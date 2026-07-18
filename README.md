@@ -54,7 +54,7 @@ git lfs version          # 显示 git-lfs/x.x.x 即成功
 ### 2. 克隆项目并安装依赖
 
 ```bash
-git clone <你的仓库URL>
+git clone https://github.com/ProgrammerYJW/Factor-Miner.git
 cd FactorMiner
 ```
 
