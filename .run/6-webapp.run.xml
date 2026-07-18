@@ -1,0 +1,21 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="6-Web因子库界面" type="PythonConfigurationType" factoryName="Python">
+    <module name="FactorMiner" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+      <env name="PYTHONIOENCODING" value="utf-8" />
+      <env name="USERPROFILE" value="$PROJECT_DIR$/tmp_home" />
+      <env name="HOME" value="$PROJECT_DIR$/tmp_home" />
+      <env name="STREAMLIT_BROWSER_GATHER_USAGE_STATS" value="false" />
+    </envs>
+    <option name="SDK_HOME" value="$PROJECT_DIR$/.venv/Scripts/python.exe" />
+    <option name="IS_MODULE_SDK" value="false" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="SCRIPT_NAME" value="streamlit" />
+    <option name="PARAMETERS" value="run factor_miner/webapp/app.py" />
+    <option name="MODULE_MODE" value="true" />
+    <method v="2" />
+  </configuration>
+</component>

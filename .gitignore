@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# venv (同学自己 pip install -r requirements.txt 装)
+.venv/
+.venv1/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# 运行时自动生成, 同学本机会自动重建
+tmp_home/
+artifacts/logs/
+artifacts/checkpoints/
+
+# 你的私有因子数据(推github前删掉线上仓库, 仅本地用)
+artifacts/factor_library.db
+artifacts/factor_values/
+artifacts/ic_series/
+
+# data_cache/raw 是半成品(561MB)且过大; features/ 已足够同学直接用 build_features.py 重建
+data_cache/raw/
+
+# 临时文件
+*.log

@@ -1,0 +1,8 @@
+# 复用已装: pandas>=3.0 numpy>=2.4 scipy statsmodels numba SQLAlchemy matplotlib
+# 新增依赖(安装务必: pip install --no-cache-dir 且 TMP/TEMP 指向D盘, 严禁写C盘):
+pymssql>=2.3
+pyarrow>=17
+torch>=2.6          # CPU版即可; M6 RL引擎使用
+streamlit>=1.40     # M7 Web界面
+plotly>=5.24        # M7 Web界面
+pytest>=8           # 测试

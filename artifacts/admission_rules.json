@@ -1,0 +1,35 @@
+{
+ "rules": [
+  {
+   "metric": "ic_mean",
+   "horizon": 10,
+   "segment": "train",
+   "op": "abs>=",
+   "threshold": 0.02,
+   "enabled": true,
+   "note": "训练段IC下限(默认)"
+  },
+  {
+   "metric": "icir",
+   "horizon": 10,
+   "segment": "train",
+   "op": "abs>=",
+   "threshold": 0.3,
+   "enabled": true,
+   "note": "训练段IR下限(默认)"
+  },
+  {
+   "metric": "icir",
+   "horizon": 10,
+   "segment": "valid",
+   "op": "abs>=",
+   "threshold": 0.15,
+   "enabled": true,
+   "note": "验证段IR下限(默认)"
+  }
+ ],
+ "max_corr_with_library": 0.7,
+ "min_coverage": 0.6,
+ "require_same_sign": true,
+ "primary_horizon": 10
+}

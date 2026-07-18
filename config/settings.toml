@@ -1,0 +1,85 @@
+# FactorMiner 全局配置
+# 路径均相对项目根目录（绝对路径亦可）
+
+[database]
+server = "192.168.219.222"
+port = 1433
+database = "JYDB"
+user = "sgd"
+password = "sgd123456."
+# 只读客户端，代码层强制仅允许 SELECT/WITH
+
+[data]
+cache_dir = "data_cache"
+start_date = "2016-01-01"
+end_date = ""                    # 空 = 自动探测数据终点(实测约2025-09-05)
+sync_workers = 10                # 数据集间并行同步线程数
+markets = [83, 90]               # 83沪 90深；如需北交所加 18；股转系统(81)永不纳入
+min_listed_days = 120            # 次新过滤：上市不足N个交易日剔除
+benchmark_indexes = ["000300", "000905", "000852"]
+
+[label]
+horizons = [1, 5, 10, 20]
+primary_horizon = 10
+
+[split]
+train_start = "2016-01-01"
+train_end = "2022-12-31"
+valid_start = "2023-01-01"
+valid_end = "2024-12-31"
+observe_start = "2025-01-01"
+observe_end = ""                 # 空 = 数据终点；观察段仅展示，不参与筛选
+
+[evaluation]
+n_quantiles = 10
+neutralize_industry = true
+neutralize_size = true
+winsor_mad = 5.0
+min_coverage = 0.6
+sample_step = 2                  # 引擎内快评的降采样步长(隔日)
+
+[admission]
+min_abs_rank_ic = 0.02           # 训练段
+min_abs_icir = 0.30              # 训练段(10日)
+valid_min_abs_icir = 0.15        # 验证段，且IC须与训练段同号
+max_corr_with_library = 0.7
+
+[fitness]
+lambda_corr = 0.1                # 与因子池相关性惩罚
+lambda_complexity = 0.001        # 每节点复杂度惩罚
+
+[expression]
+max_depth = 8
+max_nodes = 24
+windows = [3, 5, 10, 20, 40, 60]
+
+[gp]
+population_size = 500
+generations = 50
+tournament_size = 20
+p_crossover = 0.65
+p_subtree_mutation = 0.2
+p_point_mutation = 0.1
+p_hoist_mutation = 0.05
+elitism = 10
+init_depth_min = 2
+init_depth_max = 6
+n_workers = 0                    # 0 = cpu_count-1
+
+[rl]
+max_tokens = 24
+d_model = 128
+n_layers = 2
+n_heads = 4
+batch_episodes = 128
+lr = 3e-4
+clip_ratio = 0.2
+entropy_coef = 0.01
+total_updates = 2000
+device = "cpu"
+
+[paths]
+artifacts_dir = "artifacts"
+
+[webapp]
+port = 8501

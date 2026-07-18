@@ -1,0 +1,26 @@
+{
+ "n_days": 2353,
+ "n_stocks": 5373,
+ "start": "2016-01-04",
+ "end": "2025-09-05",
+ "features": [
+  "amount",
+  "bp",
+  "close",
+  "ep_ttm",
+  "free_turnover",
+  "high",
+  "limit_down_oneline",
+  "limit_up_oneline",
+  "low",
+  "neg_mv",
+  "open",
+  "sp_ttm",
+  "suspend",
+  "total_mv",
+  "turnover",
+  "universe",
+  "volume",
+  "vwap"
+ ]
+}
