@@ -72,19 +72,9 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-### 3. 构建特征矩阵
+### 3. 启动
 
-**Windows：**
-```bat
-.venv\Scripts\python.exe scripts\build_features.py
-```
-
-**Mac：**
-```bash
-.venv/bin/python scripts/build_features.py
-```
-
-此步骤读取项目自带的 `data_cache/features/` 中的预构建数据。完成后 PyCharm 打开项目，解释器选 `.venv` 下的 python，即可使用右上角运行配置启动挖掘和 Web 界面。
+PyCharm 打开项目，解释器选 `.venv` 下的 python，即可使用右上角运行配置直接启动挖掘和 Web 界面。项目自带预构建的特征矩阵（`data_cache/features/`），无需额外构建步骤。
 
 ## 使用方法
 
