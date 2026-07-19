@@ -4,3 +4,4 @@ headless = true
 
 [browser]
 gatherUsageStats = false
+serverAddress = "localhost"   # 启动信息只显示 localhost 一行(不影响实际监听地址)

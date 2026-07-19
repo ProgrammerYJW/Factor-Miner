@@ -10,6 +10,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 st.set_page_config(page_title="FactorMiner 因子库", page_icon="📈", layout="wide")
 
+# 侧边栏页面导航字号调大(默认约14px偏小)
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebarNavLink"] span {
+        font-size: 1.25rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 base = Path(__file__).parent
 pages = [
     st.Page(str(base / "page_overview.py"), title="因子库总览", icon="📚", default=True),
