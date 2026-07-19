@@ -26,7 +26,8 @@ def ic_stats(ic: pd.Series, horizon: int) -> dict:
     s = ic.dropna()
     if len(s) < 20:
         return {"n_days": int(len(s)), "ic_mean": np.nan, "ic_std": np.nan,
-                "icir": np.nan, "icir_ann": np.nan, "t_stat": np.nan, "win_rate": np.nan}
+                "icir": np.nan, "icir_ann": np.nan,
+                "rank_ic": np.nan, "ic_skew": np.nan, "win_rate": np.nan}
     mean, std = float(s.mean()), float(s.std())
     icir = mean / std if std > 1e-12 else np.nan
     return {
@@ -35,7 +36,8 @@ def ic_stats(ic: pd.Series, horizon: int) -> dict:
         "ic_std": round(std, 5),
         "icir": round(icir, 4),
         "icir_ann": round(icir * np.sqrt(252.0 / horizon), 4),
-        "t_stat": round(mean / std * np.sqrt(len(s)), 3),
+        "rank_ic": round(float(s.mean()), 5),            # = IC 均值(冗余, 方便规则里显式选 RankIC)
+        "ic_skew": round(float(s.skew()), 4),            # IC 偏度: >0 正偏(极端正IC概率略高)
         "win_rate": round(float((np.sign(s) == np.sign(mean)).mean()), 4),
     }
 

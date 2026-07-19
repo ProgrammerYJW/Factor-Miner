@@ -20,10 +20,9 @@ from factor_miner.config import Config, get_config
 # 可用于规则的指标 (与Web界面展示一致)
 METRIC_CHOICES = {
     "ic_mean": "IC均值", "ic_std": "IC标准差", "icir": "IC/IR(=IC均值÷IC标准差)",
-    "icir_ann": "年化IC/IR", "win_rate": "胜率",
-    "ls_ann_ret": "多空年化收益", "ls_sharpe": "多空夏普", "ls_mdd": "多空最大回撤",
-    "top_turnover": "Top组换手率", "rank_autocorr": "秩自相关",
-    "max_corr_with_library": "与已有因子相关性",
+    "icir_ann": "年化IC/IR", "rank_ic": "RankIC", "ic_skew": "偏度",
+    "ls_mdd": "多空最大回撤", "top_turnover": "Top组换手率",
+    "rank_autocorr": "秩自相关", "max_corr_with_library": "与已有因子相关性",
 }
 # 全局指标: 不分周期/时段 (界面上周期/时段选"全局")
 GLOBAL_METRICS = {"max_corr_with_library"}
