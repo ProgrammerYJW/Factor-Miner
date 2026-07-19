@@ -1,11 +1,8 @@
-"""页面①: 因子库总览 — 默认按10日IC/IR(训练段)降序, 表达式以课本格式渲染."""
+"""页面①: 因子库总览 — 默认按10日IC/IR(训练段)降序."""
 from __future__ import annotations
 
-import pandas as pd
 import streamlit as st
 
-from factor_miner.expression.parser import parse as _parse
-from factor_miner.expression.pretty import to_textbook
 from factor_miner.webapp.common import fmt_summary, lib
 
 st.title("📚 因子库总览")
@@ -22,7 +19,7 @@ else:
     statuses = c2.multiselect("状态", sorted(df["status"].unique().tolist()),
                               default=["active"] if "active" in set(df["status"]) else [])
     min_icir = c3.number_input("最小|IC/IR|(10日,训练)", value=0.0, step=0.05)
-    kw = c4.text_input("表达式/名称搜索")
+    kw = c4.text_input("名称搜索")
     view = df.copy()
     if engines:
         view = view[view["engine"].isin(engines)]
@@ -31,26 +28,17 @@ else:
     if min_icir > 0:
         view = view[view["icir10_train"].abs() >= min_icir]
     if kw:
-        m = view["name"].str.contains(kw, case=False, na=False) | \
-            view["expression"].str.contains(kw, case=False, na=False)
-        view = view[m]
+        view = view[view["name"].str.contains(kw, case=False, na=False)]
     st.caption(f"共 {len(view)} 个因子 (默认按 ⭐IC/IR(10日,训练) 绝对值降序)")
-    # 渲染表格: 每行用 st.latex 替换原始表达式列
-    s = fmt_summary(view)
-    table_cols = [c for c in s.columns if c != "📐表达式(课本格式)"]
-    header = st.columns([1.5 if c == "表达式" or c.startswith("📐") else
-                         0.6 if c in ("ID","状态") else 1.0
-                         for c in s.columns])
-    for h, cn in zip(header, s.columns):
-        h.markdown(f"**{cn}**" if len(cn) < 20 else f"**{cn}**", help="")
-    for _, row in s.iterrows():
-        cols = st.columns(len(s.columns))
-        for i, (c, cn) in enumerate(zip(cols, s.columns)):
-            v = row[cn]
-            if cn == "📐表达式(课本格式)":
-                c.latex(r"\displaystyle " + v)
-            else:
-                c.write(v)
+    st.dataframe(
+        fmt_summary(view), use_container_width=True, height=480,
+        column_config={
+            "⭐IC/IR(10日,训练)": st.column_config.NumberColumn(format="%.3f"),
+            "IC/IR(10日,验证)": st.column_config.NumberColumn(format="%.3f"),
+            "⭐IC均值(训练)": st.column_config.NumberColumn(format="%.4f"),
+            "IC均值(验证)": st.column_config.NumberColumn(format="%.4f"),
+        },
+    )
     st.caption("→ 到『因子详情』页查看单因子完整指标并执行删改操作")
 
 with st.expander("➕ 手工添加因子(走同一评估+准入管道)"):

@@ -47,26 +47,15 @@ def metrics_matrix(m: dict, horizons: list[int], seg: str) -> pd.DataFrame:
 
 
 def fmt_summary(df: pd.DataFrame) -> pd.DataFrame:
-    from factor_miner.expression.parser import parse as _p
-    from factor_miner.expression.pretty import to_textbook
-
     show = df[[c for c in [
         "id", "name", "engine", "status", "icir10_train", "icir10_valid",
-        "ic10_train", "ic10_valid", "ls_ann_train", "ls_sharpe_train",
-        "rank_autocorr", "coverage", "n_nodes", "created_at", "expression",
+        "ic10_train", "ic10_valid", "rank_autocorr", "coverage",
+        "n_nodes", "created_at",
     ] if c in df.columns]].copy()
-    tex_lines = []
-    for _, row in show.iterrows():
-        try:
-            tex_lines.append(r"\displaystyle " + to_textbook(_p(row["expression"])))
-        except Exception:  # noqa: BLE001 渲染失败用原文
-            tex_lines.append(row["expression"])
-    show["tex"] = tex_lines
     return show.rename(columns={
         "id": "ID", "name": "名称", "engine": "引擎", "status": "状态",
         "icir10_train": "⭐IC/IR(10日,训练)", "icir10_valid": "IC/IR(10日,验证)",
         "ic10_train": "⭐IC均值(训练)", "ic10_valid": "IC均值(验证)",
-        "ls_ann_train": "多空年化(训练)", "ls_sharpe_train": "多空夏普",
         "rank_autocorr": "秩自相关(低换手↑)", "coverage": "覆盖率",
-        "n_nodes": "节点数", "created_at": "入库时间", "tex": "📐表达式(课本格式)",
+        "n_nodes": "节点数", "created_at": "入库时间",
     })
