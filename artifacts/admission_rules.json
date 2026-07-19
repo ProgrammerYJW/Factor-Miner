@@ -1,35 +1,43 @@
 {
  "rules": [
   {
-   "metric": "ic_mean",
+   "metric": "rank_ic",
    "horizon": 10,
    "segment": "train",
-   "op": "abs>=",
-   "threshold": 0.02,
+   "op": ">=",
+   "threshold": 0.06,
    "enabled": true,
-   "note": "训练段IC下限(默认)"
+   "note": ""
   },
   {
    "metric": "icir",
    "horizon": 10,
    "segment": "train",
    "op": "abs>=",
-   "threshold": 0.3,
+   "threshold": 0.025,
    "enabled": true,
-   "note": "训练段IR下限(默认)"
+   "note": ""
   },
   {
    "metric": "icir",
    "horizon": 10,
    "segment": "valid",
    "op": "abs>=",
-   "threshold": 0.15,
+   "threshold": 0.025,
    "enabled": true,
-   "note": "验证段IR下限(默认)"
+   "note": ""
+  },
+  {
+   "metric": "max_corr_with_library",
+   "horizon": 0,
+   "segment": "global",
+   "op": "abs<=",
+   "threshold": 0.4,
+   "enabled": true,
+   "note": ""
   }
  ],
- "max_corr_with_library": 0.7,
- "min_coverage": 0.6,
- "require_same_sign": true,
+ "min_coverage": 0.0,
+ "require_same_sign": false,
  "primary_horizon": 10
 }

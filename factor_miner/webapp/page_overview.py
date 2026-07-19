@@ -6,8 +6,7 @@ import streamlit as st
 from factor_miner.webapp.common import fmt_summary, lib
 
 st.title("📚 因子库总览")
-st.caption("**IC/IR 口径(教材标准)**: IC = 日度RankIC均值; IR(信息比率) = IC均值 ÷ IC标准差 "
-           "(Grinold & Kahn《主动组合管理》与券商金工研报通用定义, 亦称ICIR)。两列均置顶显示。")
+st.caption("因子评价指标定义采用格林诺德、卡恩《主动投资组合管理》和券商金融工程研报口径")
 
 df = lib().list()
 if not len(df):

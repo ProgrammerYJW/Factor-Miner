@@ -34,7 +34,7 @@ except Exception:  # noqa: BLE001 渲染失败时退回原始式
     st.warning("课本格式渲染失败, 显示原始表达式")
 with st.expander("原始表达式(供复制/手工添加/重算)"):
     st.code(fac["expression"], language="text")
-st.caption("IC/IR = IC均值 ÷ IC标准差 (信息比率, 教材标准定义)")
+st.caption("IC/IR = IC均值 ÷ IC标准差")
 h10t = m.get("h10_train", {})
 c = st.columns(6)
 c[0].metric("⭐IC均值 (10日,训练)", h10t.get("ic_mean"))

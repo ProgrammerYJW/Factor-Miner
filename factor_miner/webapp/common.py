@@ -31,7 +31,7 @@ def cfg():
 
 SEG_NAMES = {"train": "训练段", "valid": "验证段", "observe": "观察段"}
 METRIC_COLS = [
-    ("ic_mean", "⭐IC均值"), ("ic_std", "IC标准差"), ("icir", "⭐IC/IR(=IC均值÷IC标准差)"),
+    ("ic_mean", "⭐IC均值"), ("ic_std", "IC标准差"), ("icir", "⭐IC/IR"),
     ("icir_ann", "年化IC/IR"), ("rank_ic", "RankIC"), ("ic_skew", "偏度"),
     ("win_rate", "胜率"),
     ("n_days", "样本天数"),
