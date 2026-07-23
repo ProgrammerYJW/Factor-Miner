@@ -111,11 +111,27 @@ def coverage(f: pd.DataFrame, universe: pd.DataFrame) -> float:
 
 
 def value_corr(f: pd.DataFrame, other: pd.DataFrame, step: int = 5) -> float:
-    """两因子值矩阵的截面相关均值(隔step日采样)。"""
-    vals = []
-    for i in range(0, len(f.index), step):
-        a, b = f.iloc[i], other.iloc[i]
-        m = a.notna() & b.notna()
-        if m.sum() >= MIN_XS:
-            vals.append(a[m].corr(b[m]))
-    return round(float(np.nanmean(vals)), 4) if vals else np.nan
+    """两因子值矩阵的截面相关均值(隔step日采样)。向量化实现, 零方差截面记NaN。"""
+    A = f.to_numpy(np.float64)[::step]
+    B = other.to_numpy(np.float64)[::step]
+    m = np.isfinite(A) & np.isfinite(B)
+    n = m.sum(axis=1)
+    A = np.where(m, A, 0.0)
+    B = np.where(m, B, 0.0)
+    nf = np.where(n > 0, n, np.nan)
+    a_mean = A.sum(axis=1) / nf
+    b_mean = B.sum(axis=1) / nf
+    Ac = np.where(m, A - np.nan_to_num(a_mean)[:, None], 0.0)
+    Bc = np.where(m, B - np.nan_to_num(b_mean)[:, None], 0.0)
+    cov = (Ac * Bc).sum(axis=1)
+    va = (Ac * Ac).sum(axis=1)
+    vb = (Bc * Bc).sum(axis=1)
+    # 常数截面判定用相对阈值: 浮点求和误差会让"零方差"残留 ~1e-29, 绝对判 0 不可靠
+    scale_a = (A * A).sum(axis=1)
+    scale_b = (B * B).sum(axis=1)
+    const_a = va <= 1e-12 * scale_a
+    const_b = vb <= 1e-12 * scale_b
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = cov / np.sqrt(va * vb)
+    corr[(n < MIN_XS) | const_a | const_b] = np.nan
+    return round(float(np.nanmean(corr)), 4) if np.isfinite(corr).any() else np.nan

@@ -3,11 +3,16 @@
 回合: BOS -> token... -> END, 终端奖励 = |RankIC(训练段快评)| - λ1·池相关 - λ2·复杂度
 (与GP适应度同构, 两引擎可比)。奖励做滑动标准化。已见表达式给予重复惩罚。
 进度: artifacts/logs/rl_progress.jsonl; 检查点: artifacts/checkpoints/rl_policy.pt。
+
+性能: 回合生成整批一次前向(替代逐回合单样本); 表达式评分复用GP工作进程池并行,
+子进程只做纯计算, 日志/检查点/入库全部留在主进程。
 """
 from __future__ import annotations
 
 import json
 import logging
+import time
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 
 import numpy as np
@@ -15,11 +20,10 @@ import torch
 import torch.nn.functional as F
 
 from factor_miner.config import Config, get_config
+from factor_miner.engines.gp import worker as W
 from factor_miner.engines.rl.policy import PolicyNet
 from factor_miner.engines.rl.tokens import TokenSpace
-from factor_miner.evaluation import metrics as M
 from factor_miner.evaluation.evaluator import BASE_FEATURES, Evaluator
-from factor_miner.evaluation.fast_ctx import FastContext
 from factor_miner.library import Admission, FactorLibrary
 
 log = logging.getLogger(__name__)
@@ -35,6 +39,7 @@ class RLEngine:
         self.device = torch.device(str(r.get("device", "cpu")))
         torch.manual_seed(seed)
         np.random.seed(seed)
+        torch.set_num_threads(4)                    # 小网络吃不满核, 别和评分进程抢
         self.net = PolicyNet(self.space.n_actions, self.space.max_tokens + 1,
                              d_model=int(r["d_model"]), n_layers=int(r["n_layers"]),
                              n_heads=int(r["n_heads"])).to(self.device)
@@ -43,7 +48,7 @@ class RLEngine:
         self.ent_coef = float(r["entropy_coef"])
         self.batch_episodes = int(r["batch_episodes"])
         self.total_updates = int(r["total_updates"])
-        self.fast = FastContext(self.cfg)
+        self.eval_workers = int(r.get("eval_workers", 4))
         self.lib = FactorLibrary(self.cfg)
         self.evaluator: Evaluator | None = None
         self.seen: dict[str, float] = {}              # key -> reward
@@ -54,55 +59,12 @@ class RLEngine:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.ckpt.parent.mkdir(parents=True, exist_ok=True)
 
-    # ---------- 奖励 ----------
-    def _pool_grids(self, limit: int = 10) -> list:
+    # ---------- 因子池 ----------
+    def _pool_exprs(self, limit: int = 10) -> list[str]:
         df = self.lib.list(status="active")
-        grids = []
-        if len(df):
-            from factor_miner.expression.parser import parse
-            for s in df["expression"].head(limit):
-                try:
-                    grids.append(self.fast.factor_on_grid(parse(s)))
-                except Exception:  # noqa: BLE001
-                    continue
-        return grids
+        return df["expression"].head(limit).tolist() if len(df) else []
 
-    def _terminal_reward(self, seq: list[int], pool_grids: list) -> tuple[float, dict]:
-        fcfg, ev = self.cfg["fitness"], self.cfg["evaluation"]
-        try:
-            expr = self.space.decode(seq)
-        except Exception as e:  # noqa: BLE001
-            return -1.0, {"error": str(e)[:80]}
-        k = expr.key()
-        if k in self.seen:                             # 重复: 给旧奖励再打折, 抑制刷重复
-            return self.seen[k] * 0.3, {"dup": True, "expr": expr.to_string()}
-        try:
-            f = self.fast.factor_on_grid(expr)
-            uni = self.fast.universe.iloc[:: self.fast.step]
-            cov = M.coverage(f, uni)
-            if not np.isfinite(cov) or cov < float(ev["min_coverage"]):
-                self.seen[k] = -0.5
-                return -0.5, {"error": f"cov={cov}", "expr": expr.to_string()}
-            ic = M.daily_rank_ic(f, self.fast.label_on_grid())
-            st = M.ic_stats(ic, self.fast.horizon)
-            if not np.isfinite(st["ic_mean"]):
-                self.seen[k] = -0.5
-                return -0.5, {"error": "ic nan", "expr": expr.to_string()}
-            max_corr = 0.0
-            for g in pool_grids:
-                c = M.value_corr(f, g, step=1)
-                if np.isfinite(c):
-                    max_corr = max(max_corr, abs(c))
-            rew = abs(st["ic_mean"]) \
-                - float(fcfg["lambda_corr"]) * max_corr \
-                - float(fcfg["lambda_complexity"]) * expr.n_nodes()
-            self.seen[k] = rew
-            return rew, {**st, "expr": expr.to_string(), "key": k,
-                         "max_corr_pool": round(max_corr, 4)}
-        except Exception as e:  # noqa: BLE001
-            self.seen[k] = -0.5
-            return -0.5, {"error": str(e)[:80], "expr": expr.to_string()}
-
+    # ---------- 奖励 ----------
     def _norm(self, r: float) -> float:
         self.rew_n += 1
         a = 1.0 / min(self.rew_n, 1000)
@@ -110,35 +72,107 @@ class RLEngine:
         self.rew_std = (1 - a) * self.rew_std + a * abs(r - self.rew_mean)
         return float(np.clip((r - self.rew_mean) / max(self.rew_std, 1e-4), -5, 5))
 
+    def _score(self, pool: ProcessPoolExecutor, pool_exprs: list[str],
+               steps: list[list[dict]]) -> tuple[list[float], list[dict]]:
+        """并行评分: 主进程解码/查重, 新表达式送工作进程评估(奖励=GP适应度同公式)。
+
+        子进程只返回数字; 覆盖率不足/IC无效/求值异常 -> -0.5; 批内/历史重复 -> 旧奖励×0.3。
+        """
+        B = len(steps)
+        raws: list[float] = [0.0] * B
+        infos: list[dict] = [{} for _ in range(B)]
+        keys: list[str | None] = [None] * B
+        expr_strs: list[str] = [""] * B
+        pre_seen = set(self.seen)
+        todo: dict[str, str] = {}                      # key -> expr_str (保序)
+        for i in range(B):
+            rseq = [s["action"] for s in steps[i] if s["action"] != self.space.END]
+            try:
+                expr = self.space.decode(rseq)
+            except Exception as e:  # noqa: BLE001
+                raws[i] = -1.0
+                infos[i] = {"error": str(e)[:80]}
+                continue
+            k = expr.key()
+            keys[i] = k
+            expr_strs[i] = expr.to_string()
+            if k not in pre_seen and k not in todo:
+                todo[k] = expr_strs[i]
+        results: dict[str, tuple[float, dict]] = {}
+        if todo:
+            fcfg, ev = self.cfg["fitness"], self.cfg["evaluation"]
+            items = list(todo.items())
+            chunks = np.array_split(np.array(items, dtype=object),
+                                    min(len(items), self.eval_workers * 4))
+            futs = [pool.submit(W.eval_batch,
+                                [s for _, s in ch], pool_exprs,
+                                float(fcfg["lambda_corr"]), float(fcfg["lambda_complexity"]),
+                                float(ev["min_coverage"]))
+                    for ch in chunks if len(ch)]
+            for fut, ch in zip(futs, [c for c in chunks if len(c)]):
+                for (k, _s), (fit, info) in zip(ch, fut.result()):
+                    results[k] = (fit, info)
+        count: dict[str, int] = {}
+        for i in range(B):
+            k = keys[i]
+            if k is None:
+                continue
+            count[k] = count.get(k, 0) + 1
+            if k in pre_seen or count[k] > 1:          # 重复: 给旧奖励再打折, 抑制刷重复
+                raws[i] = self.seen[k] * 0.3
+                infos[i] = {"dup": True, "expr": expr_strs[i]}
+                continue
+            fit, info = results[k]
+            if not np.isfinite(fit):                   # 覆盖率不足/IC无效/求值异常
+                self.seen[k] = -0.5
+                raws[i] = -0.5
+                infos[i] = {"error": info.get("error", ""), "expr": todo[k]}
+            else:
+                self.seen[k] = fit
+                raws[i] = fit
+                infos[i] = {**info, "expr": todo[k], "key": k}
+        return raws, infos
+
     # ---------- 采样 ----------
     @torch.no_grad()
-    def _rollout(self, pool_grids: list) -> tuple[list[dict], list[dict]]:
-        episodes, infos = [], []
-        for _ in range(self.batch_episodes):
-            seq: list[int] = []
-            steps = []
-            while True:
-                mask = self.space.valid_mask(seq)
-                inp = torch.tensor([[self.net.bos, *seq]], device=self.device)
-                ln = torch.tensor([len(seq) + 1], device=self.device)
-                mk = torch.tensor(mask[None], device=self.device)
-                logits, value = self.net(inp, ln, mk)
-                dist = torch.distributions.Categorical(logits=logits[0])
-                a = int(dist.sample())
-                steps.append({"mask": mask, "action": a,
-                              "logp": float(dist.log_prob(torch.tensor(a, device=self.device))),
-                              "value": float(value[0])})
-                if a == self.space.END or len(seq) + 1 >= self.space.max_tokens:
+    def _rollout(self, pool: ProcessPoolExecutor,
+                 pool_exprs: list[str]) -> tuple[list[dict], list[dict]]:
+        B = self.batch_episodes
+        seqs: list[list[int]] = [[] for _ in range(B)]
+        steps: list[list[dict]] = [[] for _ in range(B)]
+        active = list(range(B))
+        while active:                                  # 整批齐步走, 每步一次批量前向
+            L = max(len(seqs[i]) for i in active) + 1
+            inp = torch.zeros((len(active), L), dtype=torch.long, device=self.device)
+            lens = torch.tensor([len(seqs[i]) + 1 for i in active], device=self.device)
+            masks_np = np.stack([self.space.valid_mask(seqs[i]) for i in active])
+            for r, i in enumerate(active):
+                inp[r, 0] = self.net.bos
+                if seqs[i]:
+                    inp[r, 1: len(seqs[i]) + 1] = torch.tensor(seqs[i], dtype=torch.long)
+            logits, values = self.net(inp, lens, torch.tensor(masks_np, device=self.device))
+            dist = torch.distributions.Categorical(logits=logits)
+            acts = dist.sample()
+            logps = dist.log_prob(acts)
+            nxt = []
+            for r, i in enumerate(active):
+                a = int(acts[r])
+                steps[i].append({"mask": masks_np[r], "action": a,
+                                 "logp": float(logps[r]), "value": float(values[r])})
+                if a == self.space.END or len(seqs[i]) + 1 >= self.space.max_tokens:
                     if a != self.space.END:
-                        steps[-1]["forced_end"] = True
-                    break
-                seq.append(a)
-            raw, info = self._terminal_reward(
-                [s["action"] for s in steps if s["action"] != self.space.END], pool_grids)
-            if steps[-1].get("forced_end"):
+                        steps[i][-1]["forced_end"] = True
+                else:
+                    seqs[i].append(a)
+                    nxt.append(i)
+            active = nxt
+        raws, infos = self._score(pool, pool_exprs, steps)
+        episodes = []
+        for i in range(B):
+            raw = raws[i]
+            if steps[i][-1].get("forced_end"):
                 raw = min(raw, -0.5)                    # 未正常收敛: 惩罚
-            episodes.append({"steps": steps, "reward": self._norm(raw), "raw": raw})
-            infos.append(info)
+            episodes.append({"steps": steps[i], "reward": self._norm(raw), "raw": raw})
         return episodes, infos
 
     # ---------- PPO更新 ----------
@@ -198,7 +232,7 @@ class RLEngine:
         from factor_miner.library.rules import RuleSet
 
         rs = RuleSet.load(self.cfg)
-        ic_thr = rs.threshold_of("ic_mean") or 0.0
+        ic_thr = rs.threshold_of("ic_mean") or rs.threshold_of("rank_ic", op_prefix="") or 0.0
         ir_thr = rs.threshold_of("icir") or 0.0
         cands = sorted(
             (i for i in infos
@@ -232,26 +266,36 @@ class RLEngine:
             self.submitted = set(st.get("submitted", []))
             log.info("从检查点续训: update=%d, seen=%d", start, len(self.seen))
         n_up = total_updates or self.total_updates
-        for u in range(start, n_up):
-            pool_grids = self._pool_grids() if u % 10 == 0 or u == start else pool_grids
-            episodes, infos = self._rollout(pool_grids)
-            stats = self._update(episodes)
-            admitted = self._try_admit(infos)
-            raws = [e["raw"] for e in episodes]
-            best_i = int(np.argmax(raws))
-            rec = {"ts": datetime.now().isoformat(timespec="seconds"), "update": u,
-                   "reward_mean": round(float(np.mean(raws)), 5),
-                   "reward_best": round(float(raws[best_i]), 5),
-                   "best_expr": infos[best_i].get("expr", ""),
-                   "best_ic": infos[best_i].get("ic_mean"),
-                   "best_icir": infos[best_i].get("icir"),
-                   "n_unique": len(self.seen), "admitted": admitted, **stats}
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            if u % 5 == 0:
-                log.info("upd %d rew=%.4f best=%.4f uniq=%d %s", u, rec["reward_mean"],
-                         rec["reward_best"], rec["n_unique"], rec["best_expr"][:60])
-                torch.save({"net": self.net.state_dict(), "opt": self.opt.state_dict(),
-                            "update": u, "seen": self.seen,
-                            "submitted": list(self.submitted)}, self.ckpt)
+        with ProcessPoolExecutor(max_workers=self.eval_workers,
+                                 initializer=W.init_worker) as pool:
+            pool_exprs = self._pool_exprs()
+            for u in range(start, n_up):
+                t0 = time.perf_counter()
+                if u % 10 == 0:
+                    pool_exprs = self._pool_exprs()
+                episodes, infos = self._rollout(pool, pool_exprs)
+                t_ro = time.perf_counter() - t0
+                stats = self._update(episodes)
+                t_up = time.perf_counter() - t0 - t_ro
+                admitted = self._try_admit(infos)
+                t_ad = time.perf_counter() - t0 - t_ro - t_up
+                log.info("upd %d 耗时: 采样评分 %.1fs / PPO %.1fs / 准入 %.1fs",
+                         u, t_ro, t_up, t_ad)
+                raws = [e["raw"] for e in episodes]
+                best_i = int(np.argmax(raws))
+                rec = {"ts": datetime.now().isoformat(timespec="seconds"), "update": u,
+                       "reward_mean": round(float(np.mean(raws)), 5),
+                       "reward_best": round(float(raws[best_i]), 5),
+                       "best_expr": infos[best_i].get("expr", ""),
+                       "best_ic": infos[best_i].get("ic_mean"),
+                       "best_icir": infos[best_i].get("icir"),
+                       "n_unique": len(self.seen), "admitted": admitted, **stats}
+                with open(self.log_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                if u % 5 == 0:
+                    log.info("upd %d rew=%.4f best=%.4f uniq=%d %s", u, rec["reward_mean"],
+                             rec["reward_best"], rec["n_unique"], rec["best_expr"][:60])
+                    torch.save({"net": self.net.state_dict(), "opt": self.opt.state_dict(),
+                                "update": u, "seen": self.seen,
+                                "submitted": list(self.submitted)}, self.ckpt)
         log.info("RL完成 %d updates", n_up)

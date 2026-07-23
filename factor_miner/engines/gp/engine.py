@@ -64,7 +64,7 @@ class GPEngine:
         from factor_miner.library.rules import RuleSet
 
         rs = RuleSet.load(self.cfg)
-        ic_thr = rs.threshold_of("ic_mean") or 0.0
+        ic_thr = rs.threshold_of("ic_mean") or rs.threshold_of("rank_ic", op_prefix="") or 0.0
         ir_thr = rs.threshold_of("icir") or 0.0
         pre = [k for k in cands
                if k not in self.submitted and np.isfinite(self.fitness.get(k, -np.inf))

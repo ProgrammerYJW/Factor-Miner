@@ -13,6 +13,7 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 _EPS = 1e-12
 
@@ -94,7 +95,27 @@ def op_ts_med(a, w):
 
 
 def op_ts_rank(a, w):
-    return a.rolling(w, min_periods=_mp(w)).rank(pct=True)
+    """窗口内当前值的百分位秩(平均法)。numpy滑窗实现, 与 rolling.rank(pct=True) 一致。"""
+    mp = _mp(w)
+    v = a.to_numpy(np.float64)
+    T, _ = v.shape
+    out = np.full(v.shape, np.nan)
+
+    def block(win):                       # win: (L, N, K), 末位为当前值
+        last = win[..., -1:]
+        n = np.isfinite(win).sum(-1)
+        less = (win < last).sum(-1)
+        eq = (win == last).sum(-1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            r = (1.0 + less + (eq - 1.0) / 2.0) / n
+        return np.where((n >= mp) & np.isfinite(last[..., 0]), r, np.nan)
+
+    for t in range(min(w - 1, T)):        # 头部不完整窗
+        out[t] = block(v[max(0, t - w + 1): t + 1].T[np.newaxis])[0]
+    for t0 in range(w - 1, T, 200):       # 分块控内存
+        t1 = min(t0 + 200, T)
+        out[t0:t1] = block(sliding_window_view(v[t0 - w + 1: t1], w, axis=0))
+    return pd.DataFrame(out, index=a.index, columns=a.columns)
 
 
 def op_ts_skew(a, w):
@@ -114,12 +135,48 @@ def op_ts_ret(a, w):
     return _clean(a / base.where(base.abs() > _EPS) - 1.0)
 
 
+def _pair_win_stats(a: pd.DataFrame, b: pd.DataFrame, w: int):
+    """成对有效值的窗口和: n, Σx, Σy, Σx², Σy², Σxy (头部截断窗, cumsum实现)。"""
+    x = a.to_numpy(np.float64)
+    y = b.to_numpy(np.float64)
+    m = np.isfinite(x) & np.isfinite(y)
+    x = np.where(m, x, 0.0)
+    y = np.where(m, y, 0.0)
+
+    def win(v):
+        c = np.vstack([np.zeros((1, v.shape[1])), np.cumsum(v, axis=0)])
+        T = v.shape[0]
+        starts = np.maximum(0, np.arange(T) - w + 1)
+        return c[np.arange(1, T + 1)] - c[starts]
+
+    return (win(m.astype(np.float64)), win(x), win(y),
+            win(x * x), win(y * y), win(x * y))
+
+
 def op_ts_corr(a, b, w):
-    return _clean(a.rolling(w, min_periods=_mp(w)).corr(b))
+    """窗口皮尔逊相关(ddof=1)。numpy实现, 正常窗口与 rolling.corr 一致;
+    样本极少/近常数的数学退化窗口与pandas数值噪声不同(该处两种结果都无意义)。"""
+    mp = _mp(w)
+    n, sx, sy, sxx, syy, sxy = _pair_win_stats(a, b, w)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cov = (sxy - sx * sy / n) / (n - 1.0)
+        vx = (sxx - sx * sx / n) / (n - 1.0)
+        vy = (syy - sy * sy / n) / (n - 1.0)
+        c = cov / np.sqrt(vx * vy)
+    c[(n < mp) | (vx <= 0) | (vy <= 0)] = np.nan
+    c[np.isinf(c)] = np.nan
+    return pd.DataFrame(c, index=a.index, columns=a.columns)
 
 
 def op_ts_cov(a, b, w):
-    return _clean(a.rolling(w, min_periods=_mp(w)).cov(b))
+    """窗口协方差(ddof=1)。numpy实现, 与 rolling.cov 一致。"""
+    mp = _mp(w)
+    n, sx, sy, _, _, sxy = _pair_win_stats(a, b, w)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cov = (sxy - sx * sy / n) / (n - 1.0)
+    cov[n < mp] = np.nan
+    cov[np.isinf(cov)] = np.nan
+    return pd.DataFrame(cov, index=a.index, columns=a.columns)
 
 
 def op_ts_ema(a, w):

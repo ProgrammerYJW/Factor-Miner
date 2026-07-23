@@ -31,8 +31,8 @@ def cfg():
 
 SEG_NAMES = {"train": "训练段", "valid": "验证段", "observe": "观察段"}
 METRIC_COLS = [
-    ("ic_mean", "⭐IC均值"), ("ic_std", "IC标准差"), ("icir", "⭐IC/IR"),
-    ("icir_ann", "年化IC/IR"), ("rank_ic", "RankIC"), ("ic_skew", "偏度"),
+    ("rank_ic", "⭐RankIC"), ("ic_std", "IC标准差"), ("icir", "⭐IC/IR"),
+    ("icir_ann", "年化IC/IR"), ("ic_skew", "偏度"),
     ("win_rate", "胜率"),
     ("n_days", "样本天数"),
 ]
@@ -47,15 +47,16 @@ def metrics_matrix(m: dict, horizons: list[int], seg: str) -> pd.DataFrame:
 
 
 def fmt_summary(df: pd.DataFrame) -> pd.DataFrame:
+    ph = int(cfg()["label"]["primary_horizon"])
     show = df[[c for c in [
-        "id", "name", "engine", "status", "icir10_train", "icir10_valid",
-        "ic10_train", "ic10_valid", "rank_autocorr", "coverage",
+        "id", "name", "engine", "status", "icir_train", "icir_valid",
+        "rankic_train", "rankic_valid", "rank_autocorr", "coverage",
         "n_nodes", "created_at",
     ] if c in df.columns]].copy()
     return show.rename(columns={
         "id": "ID", "name": "名称", "engine": "引擎", "status": "状态",
-        "icir10_train": "⭐IC/IR(10日,训练)", "icir10_valid": "IC/IR(10日,验证)",
-        "ic10_train": "⭐IC均值(训练)", "ic10_valid": "IC均值(验证)",
+        "icir_train": f"⭐IC/IR({ph}日,训练)", "icir_valid": f"IC/IR({ph}日,验证)",
+        "rankic_train": "⭐RankIC(训练)", "rankic_valid": "RankIC(验证)",
         "rank_autocorr": "秩自相关(低换手↑)", "coverage": "覆盖率",
         "n_nodes": "节点数", "created_at": "入库时间",
     })

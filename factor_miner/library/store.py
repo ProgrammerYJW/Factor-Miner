@@ -32,16 +32,17 @@ CREATE TABLE IF NOT EXISTS factors (
 );
 """
 
-# 列表页提取的核心指标(⭐ICIR置顶), 来源 metrics JSON
-_SUMMARY_KEYS = [
-    ("icir10_train", "h10_train", "icir"),
-    ("icir10_valid", "h10_valid", "icir"),
-    ("ic10_train", "h10_train", "ic_mean"),
-    ("ic10_valid", "h10_valid", "ic_mean"),
-    ("ls_ann_train", "h10_train", "ls_ann_ret"),
-    ("ls_sharpe_train", "h10_train", "ls_sharpe"),
-    ("rank_autocorr", "h10_train", "rank_autocorr"),
-]
+# 列表页提取的核心指标(⭐ICIR置顶), 来源 metrics JSON; 周期随 primary_horizon 动态
+def _summary_keys(ph: int) -> list[tuple[str, str, str]]:
+    return [
+        ("icir_train", f"h{ph}_train", "icir"),
+        ("icir_valid", f"h{ph}_valid", "icir"),
+        ("rankic_train", f"h{ph}_train", "rank_ic"),
+        ("rankic_valid", f"h{ph}_valid", "rank_ic"),
+        ("ls_ann_train", f"h{ph}_train", "ls_ann_ret"),
+        ("ls_sharpe_train", f"h{ph}_train", "ls_sharpe"),
+        ("rank_autocorr", f"h{ph}_train", "rank_autocorr"),
+    ]
 
 
 class FactorLibrary:
@@ -109,18 +110,22 @@ class FactorLibrary:
             rows = [dict(r) for r in c.execute(sql, args).fetchall()]
         if not rows:
             return pd.DataFrame()
+        try:
+            ph = int(self.cfg["label"]["primary_horizon"])
+        except Exception:  # noqa: BLE001 极简配置(如测试桩)无此字段, 回退10
+            ph = 10
         recs = []
         for r in rows:
             m = json.loads(r.pop("metrics"))
             rec = {**r}
-            for out_key, seg, k in _SUMMARY_KEYS:
+            for out_key, seg, k in _summary_keys(ph):
                 rec[out_key] = m.get(seg, {}).get(k)
             rec["coverage"] = m.get("coverage")
             rec["n_nodes"] = m.get("n_nodes")
             recs.append(rec)
         df = pd.DataFrame(recs)
-        if "icir10_train" in df:
-            df = df.sort_values("icir10_train", key=lambda s: s.abs(),
+        if "icir_train" in df:
+            df = df.sort_values("icir_train", key=lambda s: s.abs(),
                                 ascending=False, na_position="last")
         return df.reset_index(drop=True)
 

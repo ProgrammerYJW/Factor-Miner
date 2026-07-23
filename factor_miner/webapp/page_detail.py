@@ -35,13 +35,14 @@ except Exception:  # noqa: BLE001 渲染失败时退回原始式
 with st.expander("原始表达式(供复制/手工添加/重算)"):
     st.code(fac["expression"], language="text")
 st.caption("IC/IR = IC均值 ÷ IC标准差")
-h10t = m.get("h10_train", {})
+ph = int(cfg()["label"]["primary_horizon"])
+htr = m.get(f"h{ph}_train", {})
 c = st.columns(6)
-c[0].metric("⭐IC均值 (10日,训练)", h10t.get("ic_mean"))
-c[1].metric("⭐IC/IR (10日,训练)", h10t.get("icir"))
-c[2].metric("⭐IC/IR (10日,验证)", m.get("h10_valid", {}).get("icir"))
-c[3].metric("多空年化(训练)", h10t.get("ls_ann_ret"))
-c[4].metric("多空夏普(训练)", h10t.get("ls_sharpe"))
+c[0].metric(f"⭐RankIC ({ph}日,训练)", htr.get("rank_ic"))
+c[1].metric(f"⭐IC/IR ({ph}日,训练)", htr.get("icir"))
+c[2].metric(f"⭐IC/IR ({ph}日,验证)", m.get(f"h{ph}_valid", {}).get("icir"))
+c[3].metric("多空年化(训练)", htr.get("ls_ann_ret"))
+c[4].metric("多空夏普(训练)", htr.get("ls_sharpe"))
 c[5].metric("与库内最大相关", m.get("max_corr_with_library"))
 
 tabs = st.tabs([SEG_NAMES[s] for s in ("train", "valid", "observe")])
@@ -71,10 +72,11 @@ with g2:
     fig2.update_layout(height=340, margin=dict(l=10, r=10, t=40, b=10))
     st.plotly_chart(fig2, width="stretch")
 
-ga = h10t.get("group_ann") or []
+ga = htr.get("group_ann") or []
 if ga:
+    nq = int(cfg()["evaluation"]["n_quantiles"])
     figg = go.Figure(go.Bar(x=[f"G{i + 1}" for i in range(len(ga))], y=ga))
-    figg.update_layout(title="10分组年化收益(训练段, G10=因子值最高组)", height=300,
+    figg.update_layout(title=f"{nq}分组年化收益(训练段, G{nq}=因子值最高组)", height=300,
                        margin=dict(l=10, r=10, t=40, b=10))
     st.plotly_chart(figg, width="stretch")
 

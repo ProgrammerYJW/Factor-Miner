@@ -19,8 +19,8 @@ from factor_miner.config import Config, get_config
 
 # 可用于规则的指标 (与Web界面展示一致)
 METRIC_CHOICES = {
-    "ic_mean": "IC均值", "ic_std": "IC标准差", "icir": "IC/IR(=IC均值÷IC标准差)",
-    "icir_ann": "年化IC/IR", "rank_ic": "RankIC", "ic_skew": "偏度",
+    "rank_ic": "RankIC", "ic_std": "IC标准差", "icir": "IC/IR(=IC均值÷IC标准差)",
+    "icir_ann": "年化IC/IR", "ic_skew": "偏度",
     "ls_mdd": "多空最大回撤", "top_turnover": "Top组换手率",
     "rank_autocorr": "秩自相关", "max_corr_with_library": "与已有因子相关性",
 }

@@ -1,13 +1,14 @@
-"""页面①: 因子库总览 — 默认按10日IC/IR(训练段)降序."""
+"""页面①: 因子库总览 — 默认按主周期IC/IR(训练段)降序."""
 from __future__ import annotations
 
 import streamlit as st
 
-from factor_miner.webapp.common import fmt_summary, lib
+from factor_miner.webapp.common import cfg, fmt_summary, lib
 
 st.title("📚 因子库总览")
 st.caption("因子评价指标定义采用格林诺德、卡恩《主动投资组合管理》和券商金融工程研报口径")
 
+ph = int(cfg()["label"]["primary_horizon"])
 df = lib().list()
 if not len(df):
     st.info("因子库为空。运行 scripts/run_gp.py 或 scripts/run_rl.py 开始挖掘, "
@@ -17,7 +18,7 @@ else:
     engines = c1.multiselect("引擎", sorted(df["engine"].unique().tolist()))
     statuses = c2.multiselect("状态", sorted(df["status"].unique().tolist()),
                               default=["active"] if "active" in set(df["status"]) else [])
-    min_icir = c3.number_input("最小|IC/IR|(10日,训练)", value=0.0, step=0.05)
+    min_icir = c3.number_input(f"最小|IC/IR|({ph}日,训练)", value=0.0, step=0.05)
     kw = c4.text_input("名称搜索")
     view = df.copy()
     if engines:
@@ -25,17 +26,17 @@ else:
     if statuses:
         view = view[view["status"].isin(statuses)]
     if min_icir > 0:
-        view = view[view["icir10_train"].abs() >= min_icir]
+        view = view[view["icir_train"].abs() >= min_icir]
     if kw:
         view = view[view["name"].str.contains(kw, case=False, na=False)]
-    st.caption(f"共 {len(view)} 个因子 (默认按 ⭐IC/IR(10日,训练) 绝对值降序)")
+    st.caption(f"共 {len(view)} 个因子 (默认按 ⭐IC/IR({ph}日,训练) 绝对值降序)")
     st.dataframe(
         fmt_summary(view), use_container_width=True, height=480,
         column_config={
-            "⭐IC/IR(10日,训练)": st.column_config.NumberColumn(format="%.3f"),
-            "IC/IR(10日,验证)": st.column_config.NumberColumn(format="%.3f"),
-            "⭐IC均值(训练)": st.column_config.NumberColumn(format="%.4f"),
-            "IC均值(验证)": st.column_config.NumberColumn(format="%.4f"),
+            f"⭐IC/IR({ph}日,训练)": st.column_config.NumberColumn(format="%.3f"),
+            f"IC/IR({ph}日,验证)": st.column_config.NumberColumn(format="%.3f"),
+            "⭐RankIC(训练)": st.column_config.NumberColumn(format="%.4f"),
+            "RankIC(验证)": st.column_config.NumberColumn(format="%.4f"),
         },
     )
     st.caption("→ 到『因子详情』页查看单因子完整指标并执行删改操作")

@@ -55,7 +55,7 @@ def eval_one(expr_str: str, pool_exprs: list[str],
         g = _pool_grid(ps)
         if g is None:
             continue
-        c = M.value_corr(f, g, step=1)
+        c = M.value_corr(f, g, step=2)
         if np.isfinite(c):
             max_corr = max(max_corr, abs(c))
     fit = abs(st["ic_mean"]) - lambda_corr * max_corr \

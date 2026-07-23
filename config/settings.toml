@@ -64,7 +64,7 @@ p_hoist_mutation = 0.05
 elitism = 10
 init_depth_min = 2
 init_depth_max = 6
-n_workers = 0                    # 0 = cpu_count-1
+n_workers = 0                    # 0 = cpu_count-1; 实测超线程全开比物理核数快(pandas内存 bound)
 
 [rl]
 max_tokens = 24
@@ -77,6 +77,7 @@ clip_ratio = 0.2
 entropy_coef = 0.01
 total_updates = 2000
 device = "cpu"
+eval_workers = 10                # 表达式并行评分进程数(复用GP worker, 只算数不写盘)
 
 [paths]
 artifacts_dir = "artifacts"
